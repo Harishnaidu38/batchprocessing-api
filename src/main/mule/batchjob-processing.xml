@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<file:config name="File_Config" doc:name="File Config" doc:id="e4f741cc-6890-4429-a4ae-8bba0b0eede4" >
+		<file:connection workingDir="F:\Mule ESB\file" />
+	</file:config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="60f972e3-7810-43ef-9112-9e6a390edb52" >
+		<salesforce:basic-connection username="kakarlaharishnaidu@gmail.com" password="H@rish@38" securityToken="v24bypXUwT0Sdnb117loPJTBg"/>
+	</salesforce:sfdc-config>
+	<file:config name="File_Config1" doc:name="File Config" doc:id="1c2dbde8-9348-488f-bee7-a5b8d94506bb" >
+		<file:connection workingDir="F:\Mule ESB\file\failedRecordes" />
+	</file:config>
+	<flow name="batchjob-processingFlow" doc:id="43e8dcac-882b-4c49-bec1-abf2c1b1e5cb" >
+		<file:listener doc:name="On New or Updated File" doc:id="282f0d03-70c3-4956-b353-a5cf7099be97" config-ref="File_Config" directory="input" autoDelete="true" moveToDirectory="F:\Mule ESB\file\backup">
+			<scheduling-strategy >
+				<fixed-frequency frequency="10" />
+			</scheduling-strategy>
+		</file:listener>
+		<ee:transform doc:name="Transform Message" doc:id="e8d6c48e-e28d-4540-8ca7-6ec0db805355" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map ( value , index ) -> {
+	Name: value." Name",
+	BillingStreet: value."Billing Street",
+	BillingCity: value."Billing City",
+	BillingState: value."Billing State",
+	BillingPostalCode: value." BillingPostalCode",
+	BillingCountry: value."Billing Country"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[attributes.fileName]" doc:name="Set Variable" doc:id="92e98d87-a876-4fe2-a00c-b3ab00213f85" variableName="fileName"/>
+		<logger level="INFO" doc:name="Logger" doc:id="20652dc2-3759-4a11-9220-0176226c0ddb" message="After Transform.......#[payload]"/>
+		<batch:job jobName="batchjob-processingBatch_Job" doc:id="fd7dc8fd-6b8a-4811-beca-ad29a5954581" maxFailedRecords="2">
+			<batch:process-records >
+				<batch:step name="Batch_Step_1_SFQuery" doc:id="c36068e2-8fd7-4425-91b8-84acafe4274c" >
+					<logger level="INFO" doc:name="Logger" doc:id="6862fb80-5643-4a7c-9655-d58c94a82f6e" message="#[payload]"/>
+					<salesforce:query doc:name="Query" doc:id="a75404b4-4b00-458f-a388-6080e6f1a15c" config-ref="Salesforce_Config" target="sfresponse">
+						<salesforce:salesforce-query ><![CDATA[Select Name
+from Account
+where Name = ':accName']]></salesforce:salesforce-query>
+						<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	accName : payload.Name
+}]]]></salesforce:parameters>
+					</salesforce:query>
+					<logger level="INFO" doc:name="Logger" doc:id="6f65dea4-e644-412a-8abe-8d964f220b2f" message="#[payload]"/>
+				</batch:step>
+				<batch:step name="Batch_Step_2_SFCreate" doc:id="9bb21a15-0431-48cb-aa40-0930ab883760" acceptExpression="#[sizeOf(vars.sfresponse)==0]">
+					<logger level="INFO" doc:name="Logger" doc:id="800b8b73-761e-4cbe-9a13-bd4c23b7a9b4" message="SF Response ..............#[payload]"/>
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="43e14442-1c23-4174-af78-34b5717cf966" size="200">
+						<salesforce:create doc:name="Create" doc:id="cd8c0003-1b3c-482c-b75b-685a8d39105c" config-ref="Salesforce_Config" type="Account" />
+					</batch:aggregator>
+				</batch:step>
+				<batch:step name="Batch_Step" doc:id="caa16a61-e101-4b4f-9d97-aa5f987647e0" >
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="165a4ea8-23d6-40c2-bb86-4446c49798e7" streaming="true">
+						<logger level="INFO" doc:name="Logger" doc:id="40c5730e-d28e-4f0c-b28e-c5d4bd2dcaa2" message='#[vars.fileName ++ now() as String {format:"dd-MM-yyyyTHH:mm:ss:SSS"}]'/>
+					</batch:aggregator>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Logger" doc:id="81057666-c326-48b8-8a82-7f4a44d2ea19" message="On Completed..........#[payload]"/>
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+</mule>
