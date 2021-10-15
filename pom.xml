@@ -41,8 +41,8 @@
 					<cloudHubDeployment>
 						<uri>https://anypoint.mulesoft.com</uri>
 						<muleVersion>4.3.0</muleVersion>
-						<username>harishnaidu_38</username>
-						<password>H@rish@38</password>
+						<username>harishnaidu38</username>
+						<password>H@rish@38ap</password>
 						<applicationName>batching-processing-api</applicationName>
 						<environment>DEV</environment>
 						<region>${region}</region>
